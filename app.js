@@ -1,10 +1,3 @@
-/* ============================================================
-   PONTO BIOMÉTRICO FACIAL — app.js (PARTE 1/2)
-   Reconhecimento facial real (face-api.js / TensorFlow.js)
-   Integrado com config.js — Pronto para Vercel
-   ============================================================ */
-
-// ---------- Elementos do DOM ----------
 const video = document.getElementById('video');
 const overlayCanvas = document.getElementById('overlayCanvas');
 const cameraBox = document.getElementById('cameraBox');
@@ -18,12 +11,11 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingSub = document.getElementById('loadingSub');
 const admTrigger = document.getElementById('admTrigger');
 
-// ---------- Estado Global da Aplicação ----------
 let db = null;
-let colaboradores = [];               // Coleção de { id, nome, foto, descriptor, etc }
+let colaboradores = [];               
 let faceMatcher = null;
-let cfg = null;                       // Será carregado do config.js / localStorage
-let turnos = [];                      // Será carregado do config.js / localStorage
+let cfg = null;
+let turnos = [];
 let stream = null;
 let modelsReady = false;
 let detectLoopHandle = null;
@@ -43,9 +35,6 @@ const EAR_CLOSED = 0.22;
 const EAR_OPEN = 0.27;
 const DETECT_INTERVAL_MS = 550;
 
-// ============================================================
-// UTILITÁRIOS & CONFIGURAÇÕES
-// ============================================================
 function esc(str) {
   return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -95,10 +84,8 @@ function tocarSom(tipo) {
 }
 
 function carregarConfig() {
-  // Fallback seguro caso o config.js não tenha carregado no escopo global
   const fallbackConfig = typeof DEFAULT_CONFIG !== 'undefined' ? DEFAULT_CONFIG : { empresaNome: 'Ponto Seguro', somRegistro: true, somCadastro: true, exigirLiveness: true, intervaloRegistroMin: 5, limiarReconhecimento: 0.5 };
   const fallbackTurnos = typeof DEFAULT_TURNOS !== 'undefined' ? DEFAULT_TURNOS : [{ id: 1, nome: 'Turno Geral', entrada: '08:00', saida: '17:00' }];
-
   try {
     const raw = localStorage.getItem('pontoConfig');
     cfg = raw ? { ...fallbackConfig, ...JSON.parse(raw) } : { ...fallbackConfig };
@@ -111,14 +98,11 @@ function carregarConfig() {
     const rawU = localStorage.getItem('ultimoRegistroPorMatricula');
     ultimoRegistroPorMatricula = rawU ? JSON.parse(rawU) : {};
   } catch { ultimoRegistroPorMatricula = {}; }
-
   const headerNome = document.getElementById('empresaNomeHeader');
   if (headerNome) headerNome.textContent = cfg.empresaNome || 'Ponto Seguro';
   document.title = (cfg.empresaNome || 'Ponto Seguro') + ' — Ponto Biométrico';
 }
-// ============================================================
-// RELÓGIO, MENU E NAVEGAÇÃO (PARTE 2/2)
-// ============================================================
+
 setInterval(() => { 
   const clockEl = document.getElementById('clock');
   if (clockEl) clockEl.textContent = new Date().toLocaleTimeString('pt-BR'); 
@@ -140,13 +124,9 @@ function handleMenuClick(section) {
   const mainSec = document.getElementById('mainSection');
   if (mainSec) mainSec.style.display = (section === 'main') ? 'block' : 'none';
   if (sections[section]) sections[section].classList.add('open');
-
   document.querySelectorAll('.menu-dropdown .item').forEach(item => item.classList.toggle('active', item.dataset.section === section));
-
   if (section === 'config') { preencherFormConfig(); }
-  if (section === 'admin') {
-    if (sessionAdminUnlocked) { mostrarPainelAdmin(); } else { mostrarLoginAdmin(); }
-  }
+  if (section === 'admin') { if (sessionAdminUnlocked) { mostrarPainelAdmin(); } else { mostrarLoginAdmin(); } }
   if (section === 'pdf') {
     const hoje = localDateKey();
     const relDataIni = document.getElementById('relDataIni');
@@ -158,34 +138,22 @@ function handleMenuClick(section) {
 }
 
 if (admTrigger) admTrigger.addEventListener('click', () => handleMenuClick('admin'));
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { handleMenuClick('main'); closeMenu(); }
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { handleMenuClick('main'); closeMenu(); } });
 
 function preencherFormConfig() {
   if (!cfg) return;
   const cfgEmpresa = document.getElementById('cfgEmpresaNome');
   const intervaloReg = document.getElementById('intervaloRegistro');
   const limiarRec = document.getElementById('limiarReconhecimento');
-  
   if (cfgEmpresa) cfgEmpresa.value = cfg.empresaNome || '';
   if (intervaloReg) intervaloReg.value = String(cfg.intervaloRegistroMin);
   if (limiarRec) limiarRec.value = String(cfg.limiarReconhecimento);
-  
   const tSomReg = document.getElementById('toggleSomRegistro');
   const tSomCad = document.getElementById('toggleSomCadastro');
   const tLive = document.getElementById('toggleLiveness');
-  
   if (tSomReg) tSomReg.classList.toggle('active', !!cfg.somRegistro);
   if (tSomCad) tSomCad.classList.toggle('active', !!cfg.somCadastro);
   if (tLive) tLive.classList.toggle('active', !!cfg.exigirLiveness);
-  
-  renderTurnosConfig();
-}
-
-function renderTurnosConfig() {
-  console.log("Turnos carregados:", turnos);
 }
 
 function toggleConfigSwitch(el, chave) {
@@ -199,11 +167,9 @@ function salvarConfiguracoes() {
   const cfgEmpresa = document.getElementById('cfgEmpresaNome');
   const intervaloReg = document.getElementById('intervaloRegistro');
   const limiarRec = document.getElementById('limiarReconhecimento');
-
   cfg.empresaNome = cfgEmpresa ? cfgEmpresa.value.trim() : 'Ponto Seguro';
   cfg.intervaloRegistroMin = intervaloReg ? parseInt(intervaloReg.value, 10) : 5;
   cfg.limiarReconhecimento = limiarRec ? parseFloat(limiarRec.value) : 0.5;
-  
   localStorage.setItem('pontoConfig', JSON.stringify(cfg));
   const headerNome = document.getElementById('empresaNomeHeader');
   if (headerNome) headerNome.textContent = cfg.empresaNome;
@@ -214,9 +180,6 @@ function salvarConfiguracoes() {
 function mostrarLoginAdmin() { console.log("Login admin exibido"); }
 function mostrarPainelAdmin() { console.log("Painel admin exibido"); }
 
-// ============================================================
-// CÂMERA, IA (VIA CONFIG.JS CDN) E LOOP DE DETECÇÃO
-// ============================================================
 async function iniciarVideo() {
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -225,42 +188,31 @@ async function iniciarVideo() {
     });
     if (video) {
       video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play();
-        iniciarLoopDetecção();
-      };
+      video.onloadedmetadata = () => { video.play(); iniciarLoopDetecção(); };
     }
   } catch (err) {
-    console.error("Erro ao acessar webcam: ", err);
-    showToast("Não foi possível acessar a câmera. Verifique as permissões.", "danger");
+    console.error("Erro câmera: ", err);
+    showToast("Não foi possível acessar a câmera.", "danger");
   }
 }
 
 async function inicializarAplicacao() {
   carregarConfig();
-  
   try {
     if (loadingSub) loadingSub.textContent = "Carregando inteligência artificial da nuvem...";
-    
-    // Pega o link seguro direto do seu config.js com fallback seguro
-    const MODEL_URL = typeof FACE_MODELS_URL !== 'undefined' ? FACE_MODELS_URL : "https://jsdelivr.net";
-    
+    const MODEL_URL = typeof FACE_MODELS_URL !== 'undefined' ? FACE_MODELS_URL : "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights";
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
     await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    
     modelsReady = true;
     if (loadingOverlay) loadingOverlay.classList.add('hidden');
     showToast("Modelos prontos via CDN!");
-    
     await iniciarVideo();
   } catch (error) {
-    console.error("Erro ao iniciar modelos da IA: ", error);
+    console.error("Erro IA: ", error);
     if (loadingOverlay) {
-      loadingOverlay.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center; font-family: sans-serif;">
-        <h3>Erro de Conexão com a IA</h3>
-        <p>Não foi possível carregar os modelos neurais da CDN configurada.</p>
-        <p>Verifique sua conexão com a internet.</p>
+      loadingOverlay.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center;">
+        <h3>Erro de Conexão</h3><p>Verifique a conexão de rede ou política CSP.</p>
       </div>`;
     }
   }
@@ -268,17 +220,10 @@ async function inicializarAplicacao() {
 
 function iniciarLoopDetecção() {
   if (!modelsReady || !video) return;
-  
   detectLoopHandle = setInterval(async () => {
     if (video.paused || video.ended) return;
-    
-    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-                                   .withFaceLandmarks();
-                                   
-    if (detection) {
-      lastFaceSeenAt = Date.now();
-      // Leitura biométrica ativa
-    }
+    const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks();
+    if (detection) { lastFaceSeenAt = Date.now(); }
   }, DETECT_INTERVAL_MS);
 }
 
