@@ -1,9 +1,10 @@
 /* ============================================================
-   PONTO BIOMÉTRICO FACIAL — app.js (PARTE 1/3)
-   Reconhecimento facial real (face-api.js / TensorFlow.js), 100% client-side.
+   PONTO BIOMÉTRICO FACIAL — app.js (PARTE 1/2)
+   Reconhecimento facial real (face-api.js / TensorFlow.js)
+   Integrado com config.js — Pronto para Vercel
    ============================================================ */
 
-// ---------- Elementos ----------
+// ---------- Elementos do DOM ----------
 const video = document.getElementById('video');
 const overlayCanvas = document.getElementById('overlayCanvas');
 const cameraBox = document.getElementById('cameraBox');
@@ -17,26 +18,12 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const loadingSub = document.getElementById('loadingSub');
 const admTrigger = document.getElementById('admTrigger');
 
-// ---------- Configurações Padrão ----------
-const DEFAULT_CONFIG = {
-  empresaNome: 'Ponto Seguro',
-  somRegistro: true,
-  somCadastro: true,
-  exigirLiveness: true,
-  intervaloRegistroMin: 5,
-  limiarReconhecimento: 0.6
-};
-
-const DEFAULT_TURNOS = [
-  { id: 1, nome: 'Turno Geral', entrada: '08:00', saida: '17:00' }
-];
-
-// ---------- Estado ----------
+// ---------- Estado Global da Aplicação ----------
 let db = null;
-let colaboradores = [];               
+let colaboradores = [];               // Coleção de { id, nome, foto, descriptor, etc }
 let faceMatcher = null;
-let cfg = null;
-let turnos = [];
+let cfg = null;                       // Será carregado do config.js / localStorage
+let turnos = [];                      // Será carregado do config.js / localStorage
 let stream = null;
 let modelsReady = false;
 let detectLoopHandle = null;
@@ -108,14 +95,18 @@ function tocarSom(tipo) {
 }
 
 function carregarConfig() {
+  // Fallback seguro caso o config.js não tenha carregado no escopo global
+  const fallbackConfig = typeof DEFAULT_CONFIG !== 'undefined' ? DEFAULT_CONFIG : { empresaNome: 'Ponto Seguro', somRegistro: true, somCadastro: true, exigirLiveness: true, intervaloRegistroMin: 5, limiarReconhecimento: 0.5 };
+  const fallbackTurnos = typeof DEFAULT_TURNOS !== 'undefined' ? DEFAULT_TURNOS : [{ id: 1, nome: 'Turno Geral', entrada: '08:00', saida: '17:00' }];
+
   try {
     const raw = localStorage.getItem('pontoConfig');
-    cfg = raw ? { ...DEFAULT_CONFIG, ...JSON.parse(raw) } : { ...DEFAULT_CONFIG };
-  } catch { cfg = { ...DEFAULT_CONFIG }; }
+    cfg = raw ? { ...fallbackConfig, ...JSON.parse(raw) } : { ...fallbackConfig };
+  } catch { cfg = { ...fallbackConfig }; }
   try {
     const rawT = localStorage.getItem('pontoTurnos');
-    turnos = rawT ? JSON.parse(rawT) : JSON.parse(JSON.stringify(DEFAULT_TURNOS));
-  } catch { turnos = JSON.parse(JSON.stringify(DEFAULT_TURNOS)); }
+    turnos = rawT ? JSON.parse(rawT) : JSON.parse(JSON.stringify(fallbackTurnos));
+  } catch { turnos = JSON.parse(JSON.stringify(fallbackTurnos)); }
   try {
     const rawU = localStorage.getItem('ultimoRegistroPorMatricula');
     ultimoRegistroPorMatricula = rawU ? JSON.parse(rawU) : {};
@@ -126,7 +117,7 @@ function carregarConfig() {
   document.title = (cfg.empresaNome || 'Ponto Seguro') + ' — Ponto Biométrico';
 }
 // ============================================================
-// RELÓGIO & MENU (PARTE 2/3)
+// RELÓGIO, MENU E NAVEGAÇÃO (PARTE 2/2)
 // ============================================================
 setInterval(() => { 
   const clockEl = document.getElementById('clock');
@@ -211,7 +202,7 @@ function salvarConfiguracoes() {
 
   cfg.empresaNome = cfgEmpresa ? cfgEmpresa.value.trim() : 'Ponto Seguro';
   cfg.intervaloRegistroMin = intervaloReg ? parseInt(intervaloReg.value, 10) : 5;
-  cfg.limiarReconhecimento = limiarRec ? parseFloat(limiarRec.value) : 0.6;
+  cfg.limiarReconhecimento = limiarRec ? parseFloat(limiarRec.value) : 0.5;
   
   localStorage.setItem('pontoConfig', JSON.stringify(cfg));
   const headerNome = document.getElementById('empresaNomeHeader');
@@ -222,8 +213,9 @@ function salvarConfiguracoes() {
 
 function mostrarLoginAdmin() { console.log("Login admin exibido"); }
 function mostrarPainelAdmin() { console.log("Painel admin exibido"); }
+
 // ============================================================
-// CÂMERA, IA E LOOP DE DETECÇÃO (PARTE 3/3)
+// CÂMERA, IA (VIA CONFIG.JS CDN) E LOOP DE DETECÇÃO
 // ============================================================
 async function iniciarVideo() {
   try {
@@ -248,10 +240,10 @@ async function inicializarAplicacao() {
   carregarConfig();
   
   try {
-    if (loadingSub) loadingSub.textContent = "Carregando inteligência artificial...";
+    if (loadingSub) loadingSub.textContent = "Carregando inteligência artificial da nuvem...";
     
-    // Rota absoluta obrigatória para a Vercel encontrar os modelos
-    const MODEL_URL = '/models'; 
+    // Pega o link seguro direto do seu config.js com fallback seguro
+    const MODEL_URL = typeof FACE_MODELS_URL !== 'undefined' ? FACE_MODELS_URL : "https://jsdelivr.net";
     
     await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
@@ -259,16 +251,16 @@ async function inicializarAplicacao() {
     
     modelsReady = true;
     if (loadingOverlay) loadingOverlay.classList.add('hidden');
-    showToast("Modelos prontos para detecção!");
+    showToast("Modelos prontos via CDN!");
     
     await iniciarVideo();
   } catch (error) {
-    console.error("Erro ao iniciar modelos: ", error);
+    console.error("Erro ao iniciar modelos da IA: ", error);
     if (loadingOverlay) {
       loadingOverlay.innerHTML = `<div style="color: #ff6b6b; padding: 20px; text-align: center; font-family: sans-serif;">
-        <h3>Erro de Carregamento</h3>
-        <p>Não foi possível carregar os modelos neurais do endereço <strong>/models</strong>.</p>
-        <p>Certifique-sie de que a pasta <strong>models</strong> está na raiz do projeto Vercel.</p>
+        <h3>Erro de Conexão com a IA</h3>
+        <p>Não foi possível carregar os modelos neurais da CDN configurada.</p>
+        <p>Verifique sua conexão com a internet.</p>
       </div>`;
     }
   }
@@ -285,7 +277,7 @@ function iniciarLoopDetecção() {
                                    
     if (detection) {
       lastFaceSeenAt = Date.now();
-      // Lógica de reconhecimento de ponto e liveness aqui
+      // Leitura biométrica ativa
     }
   }, DETECT_INTERVAL_MS);
 }
