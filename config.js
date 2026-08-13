@@ -35,8 +35,8 @@ const DEFAULT_CONFIG = {
 // batida (Entrada / Intervalo / Retorno / Saída) é sempre calculado
 // automaticamente pela ordem das batidas do colaborador no dia.
 const DEFAULT_TURNOS = [
-  { id: 1, nome: "Turno 1 - Manhã", entrada: "05:00", intervaloInicio: "09:00", intervaloFim: "09:20", saida: "13:00" },
-  { id: 2, nome: "Turno 2 - Tarde", entrada: "13:00", intervaloInicio: "17:00", intervaloFim: "17:20", saida: "21:00" }
+  { id: 1, nome: "Turno 1 - Manhã", entrada: "08:10", intervaloInicio: "12:00", intervaloFim: "13:30", saida: "17:00" },
+  { id: 2, nome: "Turno 2 - Tarde", entrada: "19:00", intervaloInicio: "23:00", intervaloFim: "23:20", saida: "02:20" }
 ];
 
 const TIPOS_BATIDA = ["Entrada", "Intervalo - Saída", "Intervalo - Retorno", "Saída"];
