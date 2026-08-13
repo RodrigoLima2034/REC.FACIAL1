@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ponto Biométrico Facial - Sistema de Registro de Ponto</title>
+
+<!-- Content-Security-Policy: reduz risco de XSS/injeção de script. Se adicionar um endpoint
+     próprio de sincronização AWS, inclua o domínio dele em connect-src abaixo. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
+  connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com;
+  img-src 'self' data: blob:;
+  style-src 'self' 'unsafe-inline';
+  media-src 'self' blob:;
+  worker-src 'self' blob:;
+  frame-ancestors 'none';
+  base-uri 'self';
+  form-action 'self';
+">
+<meta name="referrer" content="no-referrer">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOADING -->
+<div class="loading-overlay active" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">
+        Carregando modelos de reconhecimento facial<br>
+        <strong id="loadingSub">Aguarde...</strong>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="logo" id="admTrigger" title="Acesso administrativo">
+            <div class="dot"></div>
+            <span class="logo-text" id="empresaNomeHeader">PONTO SEGURO</span>
+        </div>
+        <div class="header-right">
+            <div class="clock" id="clock">00:00:00</div>
+            <div class="menu-hamburger">
+                <button class="menu-btn" onclick="toggleMenu()">☰ Menu</button>
+                <div class="menu-dropdown" id="menuDropdown">
+                    <div class="item active" data-section="main" onclick="handleMenuClick('main')">🏠 Início</div>
+                    <div class="item" data-section="config" onclick="handleMenuClick('config')">⚙️ Configurações</div>
+                    <div class="item" data-section="admin" onclick="handleMenuClick('admin')">🔒 Administração</div>
+                    <div class="item" data-section="pdf" onclick="handleMenuClick('pdf')">📄 Relatórios RH</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN: RECONHECIMENTO AUTOMÁTICO -->
+    <div id="mainSection">
+        <div class="camera-box" id="cameraBox">
+            <video id="video" autoplay playsinline muted></video>
+            <canvas id="overlayCanvas"></canvas>
+            <div class="scanner-overlay">
+                <div class="scanner-circle" id="scannerCircle"></div>
+            </div>
+            <div class="capture-flash" id="captureFlash"></div>
+            <div class="live-badge" id="liveBadge">● AO VIVO — reconhecimento automático</div>
+        </div>
+
+        <div class="match-container waiting" id="matchContainer">
+            <img id="matchImg" class="match-photo" src="assets/user-placeholder.svg" alt="">
+            <div class="match-info">
+                <div id="matchName" class="match-name">Aguardando...</div>
+                <div id="matchStatus" class="match-status">
+                    <span class="dot dot-gray"></span>
+                    Posicione o rosto na câmera
+                </div>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="handleMenuClick('admin')">🔒 Administração</button>
+            <button class="btn btn-secondary" onclick="handleMenuClick('pdf')">📄 Relatórios</button>
+        </div>
+        <p class="hint-text">O ponto é registrado automaticamente ao reconhecer o rosto cadastrado. Nenhum toque na tela é necessário.</p>
+    </div>
+
+    <!-- CONFIG -->
+    <div id="configSection" class="section-hidden">
+        <div class="section-title"><span>⚙️ Configurações</span><span class="badge">GERAL</span></div>
+
+        <div class="input-group">
+            <label>🏢 Nome da empresa (exibido no topo e nos relatórios)</label>
+            <input type="text" id="cfgEmpresaNome" placeholder="Ex: Viação Exemplo Transportes">
+        </div>
+
+        <div class="config-item">
+            <label>🔊 Som ao registrar ponto</label>
+            <div class="toggle active" id="toggleSomRegistro" onclick="toggleConfigSwitch(this,'somRegistro')"><div class="thumb"></div></div>
+        </div>
+        <div class="config-item">
+            <label>🔊 Som ao cadastrar colaborador</label>
+            <div class="toggle active" id="toggleSomCadastro" onclick="toggleConfigSwitch(this,'somCadastro')"><div class="thumb"></div></div>
+        </div>
+        <div class="config-item">
+            <label>😉 Exigir piscar de olhos (prova de vida)</label>
+            <div class="toggle active" id="toggleLiveness" onclick="toggleConfigSwitch(this,'exigirLiveness')"><div class="thumb"></div></div>
+        </div>
+
+        <div class="input-group">
+            <label>⏱️ Intervalo mínimo entre batidas do mesmo colaborador</label>
+            <select id="intervaloRegistro">
+                <option value="1">1 minuto</option>
+                <option value="2">2 minutos</option>
+                <option value="5" selected>5 minutos</option>
+                <option value="10">10 minutos</option>
+                <option value="30">30 minutos</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label>🎯 Sensibilidade do reconhecimento (menor = mais rigoroso)</label>
+            <select id="limiarReconhecimento">
+                <option value="0.45">Rigoroso (0.45)</option>
+                <option value="0.5" selected>Recomendado (0.50)</option>
+                <option value="0.55">Tolerante (0.55)</option>
+            </select>
+        </div>
+
+        <button class="btn btn-primary" onclick="salvarConfiguracoes()" style="width:100%;margin-top:6px;">💾 Salvar configurações</button>
+
+        <div class="section-title" style="margin-top:18px;"><span>🚌 Turnos de trabalho</span><span class="badge">ESCALA</span></div>
+        <div id="turnosConfigWrap"></div>
+        <button class="btn btn-secondary" onclick="salvarTurnos()" style="width:100%;margin-top:6px;">💾 Salvar turnos</button>
+    </div>
+
+    <!-- ADMIN -->
+    <div id="adminSection" class="section-hidden">
+        <div class="section-title"><span>🔒 Administração</span><span class="badge">RESTRITO</span></div>
+
+        <div id="adminLoginBox">
+            <div class="input-group">
+                <label>🔑 PIN de administrador</label>
+                <input type="password" id="adminPinInput" placeholder="Digite o PIN" inputmode="numeric" maxlength="12">
+            </div>
+            <button class="btn btn-primary" onclick="tentarLoginAdmin()" style="width:100%;">Entrar</button>
+            <p class="hint-text" id="pinFirstRunHint" style="display:none;">Primeiro acesso: defina um PIN novo para continuar.</p>
+        </div>
+
+        <div id="adminPanelBox" style="display:none;">
+            <div class="input-row">
+                <div class="input-group">
+                    <label>👤 Nome completo</label>
+                    <input type="text" id="newName" placeholder="Nome do colaborador" maxlength="80">
+                </div>
+                <div class="input-group">
+                    <label>🆔 Matrícula</label>
+                    <input type="text" id="newId" placeholder="Ex: MAT-001" maxlength="30">
+                </div>
+            </div>
+            <div class="input-row">
+                <div class="input-group">
+                    <label>📋 Departamento</label>
+                    <select id="newDept">
+                        <option>Operações</option>
+                        <option>Motoristas</option>
+                        <option>Cobradores</option>
+                        <option>Manutenção</option>
+                        <option>Administração</option>
+                        <option>Garagem / Pátio</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>🚌 Turno</label>
+                    <select id="newTurno"></select>
+                </div>
+            </div>
+
+            <div class="face-capture-box">
+                <div id="captureStatus" class="capture-status">Clique em "Capturar rosto" 3 vezes com o colaborador olhando para a câmera.</div>
+                <div class="capture-dots"><span id="capDot1" class="cap-dot"></span><span id="capDot2" class="cap-dot"></span><span id="capDot3" class="cap-dot"></span></div>
+                <button class="btn btn-secondary" onclick="capturarAmostraRosto()" style="width:100%;">📸 Capturar rosto (<span id="capCountLabel">0</span>/3)</button>
+            </div>
+
+            <button class="btn btn-success" onclick="cadastrarColaborador()" style="width:100%;margin:10px 0;">💾 Salvar colaborador</button>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="handleMenuClick('pdf')" style="flex:1;">📄 Relatórios</button>
+                <button class="btn btn-secondary btn-sm" onclick="exportarBackupJSON()" style="flex:1;">💾 Backup</button>
+                <button class="btn btn-danger btn-sm" onclick="limparHistorico()" style="flex:1;">🗑️ Limpar pontos</button>
+            </div>
+
+            <div style="margin-top:14px;">
+                <div class="table-head-row"><span>👥 Colaboradores cadastrados</span><span id="colabCount" class="muted-count">0</span></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Foto</th><th>Nome</th><th>Matrícula</th><th>Turno</th><th></th></tr></thead>
+                        <tbody id="colabBody"><tr><td colspan="5" class="empty">📭 Nenhum colaborador</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div style="margin-top:14px;">
+                <div class="table-head-row"><span>📋 Últimos registros de ponto</span><span id="logCount" class="muted-count">0</span></div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead><tr><th>Foto</th><th>Nome</th><th>Matrícula</th><th>Tipo</th><th>Data/Hora</th></tr></thead>
+                        <tbody id="logBody"><tr><td colspan="5" class="empty">📭 Nenhum registro</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <button class="btn btn-secondary" onclick="sairAdmin()" style="width:100%;margin-top:12px;">🚪 Sair da administração</button>
+        </div>
+    </div>
+
+    <!-- PDF / RELATORIOS -->
+    <div id="pdfSection" class="section-hidden">
+        <div class="section-title"><span>📄 Relatórios para o RH</span><span class="badge">EXPORTAR</span></div>
+
+        <div class="input-row">
+            <div class="input-group">
+                <label>📅 De</label>
+                <input type="date" id="relDataIni">
+            </div>
+            <div class="input-group">
+                <label>📅 Até</label>
+                <input type="date" id="relDataFim">
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button class="btn btn-secondary" onclick="exportarPDFDetalhado()">📋 PDF Detalhado</button>
+            <button class="btn btn-secondary" onclick="exportarPDFResumoHoras()" style="background:#475569;">📊 PDF Resumo de horas</button>
+            <button class="btn btn-secondary" onclick="exportarXMLOracle()" style="background:#06b6d4;color:#020617;">📄 XML (Oracle)</button>
+            <button class="btn btn-secondary" onclick="exportarCSV()" style="background:#f59e0b;color:#020617;">📊 CSV Excel</button>
+        </div>
+
+        <div class="info-box">
+            <p>📁 Os relatórios usam os registros salvos neste tablet/navegador. Para consolidar os dados de vários tablets em um só sistema (Oracle, AWS etc.), veja a integração descrita no arquivo <code>README.md</code> do projeto.</p>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-icons">
+            <span>🔒 Reconhecimento facial local</span><span>•</span>
+            <span>📸 Automático</span><span>•</span>
+            <span>📄 Relatórios</span>
+        </div>
+        <span id="footerYear"></span> Ponto Biométrico Facial
+    </footer>
+</div>
+
+<!-- ==========================================
+     BIBLIOTECAS EXTERNAS (via CDN — nada para instalar)
+     ========================================== -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.js"></script>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
